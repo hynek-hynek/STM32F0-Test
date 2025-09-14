@@ -1,0 +1,20 @@
+#ifndef UARTX_H
+#define UARTX_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define MY_UART_BUFFER_LENGTH_RX 128
+#define MY_UART_BUFFER_LENGTH_TX 128
+
+void uratx_Init(void);
+int uratx_SendBuffer(uint8_t* apBuffer, uint8_t aLength);
+int uratx_GetBuffer(uint8_t* apBuffer, uint8_t* apLength);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // UARTX_H
+

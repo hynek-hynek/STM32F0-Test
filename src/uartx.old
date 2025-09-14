@@ -1,0 +1,148 @@
+#include "stm32f0xx.h"
+#include "stm32f0xx_hal.h"
+#include "uart_stm32f0xx.h"
+
+#include <string.h>  // Pro memcpy
+#include <stdlib.h>  // Pro malloc a free
+
+#include "main.h"
+#include "fifo.h"
+
+
+UART_HandleTypeDef hMyUart;  // Deklarace handleru pro USART1
+FIFO_t fifoTx;
+FIFO_t fifoRx;
+uint8_t rx_data;
+
+//docasne
+extern s_usarts_data_stm32f0xx_t usarts_data_stm32f0xx[UART_STM32F0XX_NO_OF_UARTS];
+
+/*
+void USART1_IRQHandler(void) {
+    HAL_UART_IRQHandler(&hMyUart);  // Volání HAL zpracování přerušení
+}
+*/
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART1) {
+        uint8_t tx_data;
+        if (FIFO_pop(&fifoTx, &tx_data) == 0) {
+            // Posle
+            if (HAL_UART_Transmit_IT(&hMyUart, &tx_data, 1) != HAL_OK) {
+                Error_Handler();
+            }
+        }
+    }
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART1) {
+      if (FIFO_push(&fifoRx, &rx_data) != 0) {
+            Error_Handler();
+        }
+        if (HAL_UART_Receive_IT(&hMyUart, &rx_data, 1) != HAL_OK) {
+            Error_Handler();
+        } 
+    }
+}
+
+
+void uratx_Init(void) {
+
+    //ulozi pointer na handle
+    //uart_irq_descriptors[0].p_huart = &hMyUart;
+    usarts_data_stm32f0xx[0].p_uart_handle_stm32f0xx->uart_handle_HAL = hMyUart;
+    // Inicializace struktury pro USART1
+
+
+    hMyUart.Instance = USART1;
+    hMyUart.Init.BaudRate = 115200;
+    hMyUart.Init.WordLength = UART_WORDLENGTH_8B;
+    hMyUart.Init.StopBits = UART_STOPBITS_1;
+    hMyUart.Init.Parity = UART_PARITY_NONE;
+    hMyUart.Init.Mode = UART_MODE_TX_RX;
+    hMyUart.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    hMyUart.Init.OverSampling = UART_OVERSAMPLING_16;
+    if (HAL_UART_Init(&hMyUart) != HAL_OK) {
+        Error_Handler();
+    }
+
+    // Inicializace Tx FIFO s maximálně 128 položkami, každá položka typu uint8_t
+    if (FIFO_init(&fifoTx, 128, sizeof(uint8_t)) != 0) {
+        Error_Handler();
+    }
+
+    // Inicializace Rx FIFO s maximálně 128 položkami, každá položka typu uint8_t
+    if (FIFO_init(&fifoRx, 128, sizeof(uint8_t)) != 0) {
+        Error_Handler();
+    }
+    
+    // 🔴 Povolení přerušení RX
+    if (HAL_UART_Receive_IT(&hMyUart, &rx_data, 1) != HAL_OK) {
+        Error_Handler();
+    }
+    
+}
+
+int uratx_SendBuffer(uint8_t* apBuffer, uint8_t aLength) {
+    HAL_UART_StateTypeDef uart_State;
+    uint8_t data;
+
+    if (apBuffer == NULL || aLength == 0) {
+        Error_Handler();
+        return -1;
+    }
+
+    // Kopíruj data do FIFO
+    while (aLength !=0) {
+        if (FIFO_push(&fifoTx, apBuffer) != 0) {
+            Error_Handler();
+            return -1;
+        }
+        apBuffer++;
+        aLength--;
+    }
+
+    // Zjisti stav uart
+    uart_State = HAL_UART_GetState(&hMyUart);
+    if ((uart_State & HAL_UART_STATE_BUSY_TX) != HAL_UART_STATE_BUSY_TX) {
+        // Nevysila, muzeme poslat prvni znak
+        if (FIFO_pop(&fifoTx, &data) != 0) {
+            Error_Handler();
+            return -1;
+        }
+        // Posle
+        
+        if (HAL_UART_Transmit_IT(&hMyUart, &data, 1) != HAL_OK) {
+            Error_Handler();
+        }
+           
+    }
+        
+    return 0;  // Úspěch
+}
+
+int uratx_GetBuffer(uint8_t* apBuffer, uint8_t* apLength) {
+    
+    if (apBuffer == NULL || apLength == NULL) {
+        Error_Handler();
+        return -1;
+    }
+
+    // Inicializace delky
+    *apLength = 0;
+    
+    // Kopiruj data z FIFO
+    while (FIFO_isEmpty(&fifoRx) == false)
+    {
+        if (FIFO_pop(&fifoRx, apBuffer) != 0) {
+            Error_Handler(); 
+            return -1;
+        }
+        else {
+            apBuffer++;
+            (*apLength)++;
+        }
+    }
+       
+    return 0;  // Úspěch
+}
