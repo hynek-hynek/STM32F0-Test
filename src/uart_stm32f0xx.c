@@ -273,15 +273,43 @@ e_uart_result_t uart_create_stm32f0xx(void* ap_uart_handle_stm32f0xx)
     e_uart_result_t result = e_UART_RESULT_OK;
     s_uart_handle_stm32f0xx_t* p_uart_handle_stm32f0xx = NULL;
 
+    // Kontrola parametru
     if (NULL == ap_uart_handle_stm32f0xx)
     {
         // Neplatné parametry
         result = e_UART_RESULT_INVALID_PARAM;
     }
-    else
+
+    if (e_UART_RESULT_OK == result)
     {
         // Pretypovani handle na ukazatel na strukturu platformy
         p_uart_handle_stm32f0xx = (s_uart_handle_stm32f0xx_t *) ap_uart_handle_stm32f0xx;
+        // Ověření parametru konfigurace UARTu
+        if ((UART_STM32F0XX_BUFFER_MAX_LENGTH_RX < p_uart_handle_stm32f0xx->rx_buffer_length) ||
+            (UART_STM32F0XX_BUFFER_MAX_LENGTH_TX < p_uart_handle_stm32f0xx->tx_buffer_length) ||
+            (0 == p_uart_handle_stm32f0xx->rx_buffer_length) ||
+            (0 == p_uart_handle_stm32f0xx->tx_buffer_length))
+        {
+            // Neplatná velikost bufferu
+            result = e_UART_RESULT_INVALID_PARAM;
+        }
+    }
+
+    if (e_UART_RESULT_OK == result)
+    {
+        // Kontrola platnosti ukazatelů na GPIO porty a piny
+        if ((NULL == p_uart_handle_stm32f0xx->p_rx_port) ||
+            (NULL == p_uart_handle_stm32f0xx->p_tx_port) ||
+            (0u   == p_uart_handle_stm32f0xx->rx_gpio_init_struct.Pin) ||
+            (0u   == p_uart_handle_stm32f0xx->tx_gpio_init_struct.Pin))
+        {
+            // Neplatné parametry
+            result = e_UART_RESULT_INVALID_PARAM;
+        }
+    }
+
+    if (e_UART_RESULT_OK == result)
+    {
         // Nastavení handle pro platformovou vrstvu
         switch ((uint32_t)(p_uart_handle_stm32f0xx->uart_handle_HAL.Instance)) {
             case (uint32_t) USART1:
@@ -295,14 +323,58 @@ e_uart_result_t uart_create_stm32f0xx(void* ap_uart_handle_stm32f0xx)
                 result = e_UART_RESULT_ERROR;
                 break;
         }
-        // Kontrola dostupnosti HW instance
-        if (e_UART_RESULT_OK == result)
+    }
+
+    if (e_UART_RESULT_OK == result)
+    {
+        // Alokace paměti pro RX buffer
+        p_uart_handle_stm32f0xx->p_rx_buffer = (uart_data_t *) malloc(p_uart_handle_stm32f0xx->rx_buffer_length * sizeof(uart_data_t));
+        // Kontrola alokace paměti
+        if (NULL == p_uart_handle_stm32f0xx->p_rx_buffer)
         {
-            // Zavola inicializaci HW instance
-            if (HAL_OK != HAL_UART_Init(&p_uart_handle_stm32f0xx->uart_handle_HAL)) 
+            result = e_UART_RESULT_MEMORY_ERROR;
+        }
+    }
+
+    if (e_UART_RESULT_OK == result)
+    {
+        // Alokace paměti pro TX buffer
+        p_uart_handle_stm32f0xx->p_tx_buffer = (uart_data_t *) malloc(p_uart_handle_stm32f0xx->tx_buffer_length * sizeof(uart_data_t));
+        // Kontrola alokace paměti
+        if (NULL == p_uart_handle_stm32f0xx->p_tx_buffer)
+        {
+            result = e_UART_RESULT_MEMORY_ERROR;
+        }
+    }
+
+    if (e_UART_RESULT_OK == result)
+    {
+        // Zavola inicializaci HW instance
+        if (HAL_OK != HAL_UART_Init(&p_uart_handle_stm32f0xx->uart_handle_HAL)) 
+        {
+            // Inicializace se nezdarila
+            result = e_UART_RESULT_ERROR;
+        }
+    }
+
+    if (e_UART_RESULT_OK != result)
+    {
+        // Chyba - uklid
+        // Uvolnění alokované paměti pokudje platný handle
+        if (NULL != p_uart_handle_stm32f0xx)
+        {
+            // Uvolnění rx fifo
+            if (NULL != p_uart_handle_stm32f0xx->p_rx_buffer)
             {
-                // Inicializace se nezdarila
-                result = e_UART_RESULT_ERROR;
+                // Uvolnění rx fifo
+                free(p_uart_handle_stm32f0xx->p_rx_buffer);
+            }
+            
+            // Uvolnění tx fifo
+            if (NULL != p_uart_handle_stm32f0xx->p_tx_buffer)
+            {
+                // Uvolnění tx fifo
+                free(p_uart_handle_stm32f0xx->p_tx_buffer);
             }
         }
     }

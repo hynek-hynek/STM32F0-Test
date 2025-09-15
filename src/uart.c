@@ -127,7 +127,7 @@ e_uart_result_t uart_create(s_uart_handle_t **app_uart_handle, const s_uart_conf
         // Chyba - uklid
     
         // Uvolnění alokované paměti
-        if (NULL !=p_uart_handle)
+        if (NULL != p_uart_handle)
         {
             // Uvolnění rx fifo
             if (NULL != p_uart_handle->p_rx_fifo)
@@ -160,7 +160,7 @@ e_uart_result_t uart_create(s_uart_handle_t **app_uart_handle, const s_uart_conf
             // Nastavi handle na NULL
             *app_uart_handle = NULL;
         }
-}
+    }
     
     // Vrácení výsledku
     return result;
